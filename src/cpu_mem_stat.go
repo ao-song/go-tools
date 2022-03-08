@@ -1,5 +1,3 @@
-package main
-
 import (
 	"fmt"
 	"time"
@@ -16,9 +14,22 @@ import (
 
 var cpu_percents = make([]opts.LineData, 0)
 var mem_percents = make([]opts.LineData, 0)
+var tstamp = make([]time.Time, 0)
 
-var period = 2 * 60 * 12
-var interval = 5 * time.Second
+var period = 2 * 60 * 60
+var interval = time.Second
+
+func collectTstamp() {
+	for {
+		tstamp = append(tstamp, time.Now())
+
+		for len(tstamp) > period {
+			tstamp = tstamp[1:]
+		}
+
+		time.Sleep(interval)
+	}
+}
 
 func collectCPUStat() {
 
@@ -30,7 +41,7 @@ func collectCPUStat() {
 	fmt.Printf("CPU count: %v\n", counts)
 
 	for {
-		percent, err := cpu.Percent(1, false)
+		percent, err := cpu.Percent(time.Second, false)
 		if err != nil {
 			fmt.Printf("Get cpu percent failed, err: %v\n", err)
 		}
@@ -64,32 +75,29 @@ func collectMemStat() {
 func httpserver(w http.ResponseWriter, _ *http.Request) {
 	line := charts.NewLine()
 
-	s := make([]int, period)
-	start := 0
-	for i := range s {
-		s[i] = start
-		start += 1
-	}
-
 	line.SetGlobalOptions(
 		charts.WithInitializationOpts(opts.Initialization{Theme: types.ThemeWesteros}),
+		charts.WithXAxisOpts(opts.XAxis{
+			Name: "Past 2 hours",
+			Type: "category"}),
 		charts.WithTitleOpts(opts.Title{
 			Title:    "CPU/Memory Status",
 			Subtitle: "CPU/Memory Usage Percentage",
 		}))
 
 	// Put data into instance
-	line.SetXAxis(s).
+	line.SetXAxis(tstamp).
 		AddSeries("CPU Usage", cpu_percents).
 		AddSeries("Memory Usage", mem_percents).
 		SetSeriesOptions(charts.WithLineChartOpts(opts.LineChart{Smooth: true}))
 	line.Render(w)
 }
 
-func main() {
-	go collectCPUStat()
-	go collectMemStat()
+// func main() {
+// 	go collectTstamp()
+// 	go collectCPUStat()
+// 	go collectMemStat()
 
-	http.HandleFunc("/", httpserver)
-	http.ListenAndServe(":8081", nil)
-}
+// 	http.HandleFunc("/", httpserver)
+// 	http.ListenAndServe(":8081", nil)
+// }
